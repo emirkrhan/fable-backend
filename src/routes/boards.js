@@ -1,0 +1,33 @@
+const express = require('express');
+const ctrl = require('../controllers/boardController');
+const shareCtrl = require('../controllers/boardShareController');
+const { jwtAuth } = require('../middleware/jwt');
+const { canViewBoard, canEditBoard } = require('../middleware/boardAccess');
+
+const router = express.Router();
+
+router.use(jwtAuth);
+
+// CRUD (relative paths; mounted at /api/boards)
+router.post('/', ctrl.create);
+// List owned + shared boards (single handler)
+router.get('/', shareCtrl.listForCurrentUser);
+router.get('/:boardId', canViewBoard, shareCtrl.attachPermission, ctrl.getById);
+router.patch('/:boardId', canEditBoard, ctrl.patchBoard); // PATCH for flexible updates
+router.put('/:boardId', canEditBoard, ctrl.rename);
+router.delete('/:boardId', canEditBoard, ctrl.remove);
+
+// Incremental patch (alternative endpoint)
+router.post('/:boardId/patches', ctrl.postPatches);
+
+// Full-state overwrite
+router.put('/:boardId/content', ctrl.putContent);
+
+// Sharing endpoints
+router.post('/:boardId/share', canEditBoard, shareCtrl.shareWithEmail);
+router.get('/:boardId/shares', canEditBoard, shareCtrl.listShares);
+router.delete('/:boardId/shares/:userId', canEditBoard, shareCtrl.deleteShare);
+
+// Listing route defined above
+
+module.exports = router;
