@@ -27,25 +27,66 @@ async function shareBoardWithEmail({ boardId, ownerId, email }) {
 }
 
 async function listBoardsForUser({ userId }) {
-	// Owned boards
-	const { rows: owned } = await pool.query(
-		`select b.*, true as is_owner, false as is_shared
-		 from boards b where b.owner_id = $1`, [userId]
-	);
-	// Shared boards
-	const { rows: shared } = await pool.query(
-		`select b.*, false as is_owner, true as is_shared
-		 from board_shares s join boards b on b.id = s.board_id
-		 where s.user_id = $1::uuid`, [userId]
-	);
-	return [...owned, ...shared]
-		.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
-		.map(b => ({
-			...b,
-			access: b.is_owner ? 'owner' : 'viewer',
-			isShared: !!b.is_shared
-		}));
+  // Owned boards
+  const { rows: owned } = await pool.query(
+    `
+    SELECT 
+      b.id,
+      b.name,
+      b.owner_id,
+      u.name AS owner_name,
+      jsonb_array_length(b.nodes) AS node_count,
+      jsonb_array_length(b.edges) AS edge_count,
+      b.created_at,
+      b.updated_at,
+      true AS is_owner,
+      false AS is_shared
+    FROM boards b
+    JOIN users u ON u.id = b.owner_id::uuid
+    WHERE b.owner_id = $1
+    `,
+    [userId]
+  );
+
+  // Shared boards
+  const { rows: shared } = await pool.query(
+    `
+    SELECT 
+      b.id,
+      b.name,
+      b.owner_id,
+      u.name AS owner_name,
+      jsonb_array_length(b.nodes) AS node_count,
+      jsonb_array_length(b.edges) AS edge_count,
+      b.created_at,
+      b.updated_at,
+      false AS is_owner,
+      true AS is_shared
+    FROM board_shares s
+    JOIN boards b ON b.id = s.board_id
+    JOIN users u ON u.id = b.owner_id::uuid
+    WHERE s.user_id = $1::uuid
+    `,
+    [userId]
+  );
+
+  // Combine results
+  return [...owned, ...shared]
+    .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
+    .map(b => ({
+      id: b.id,
+      name: b.name,
+      ownerId: b.owner_id,
+      ownerName: b.owner_name,
+      nodeCount: b.node_count,
+      edgeCount: b.edge_count,
+      createdAt: b.created_at,
+      updatedAt: b.updated_at,
+      access: b.is_owner ? 'owner' : 'viewer',
+      isShared: b.is_shared
+    }));
 }
+
 
 async function userCanViewBoard({ userId, boardId }) {
 	const { rows } = await pool.query(
