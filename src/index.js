@@ -12,6 +12,7 @@ const authRouter = require('./routes/auth');
 const app = express();
 const http = require('http');
 const server = http.createServer(app);
+const { ExpressPeerServer } = require('peer');
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const { userCanViewBoard } = require('./services/boardShareService');
@@ -34,7 +35,12 @@ const io = new Server(server, {
 	cors: {
 		origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002'],
 		credentials: true
-	}
+	},
+	pingInterval: 25000, // Send ping every 25 seconds
+	pingTimeout: 20000,  // Wait 20 seconds for pong response
+	transports: ['polling', 'websocket'], // Start with polling, upgrade to websocket
+	upgradeTimeout: 10000, // Allow 10 seconds for upgrade
+	allowUpgrades: true
 });
 app.set('io', io);
 
@@ -54,6 +60,22 @@ app.get('/db/health', async (req, res) => {
 app.use('/api/boards', boardsRouter);
 app.use('/api/users', usersRouter);
 app.use(authRouter);
+
+// PeerJS Server Configuration
+const peerServer = ExpressPeerServer(server, {
+	debug: true,
+	path: '/',
+	allow_discovery: true
+});
+app.use('/peerjs', peerServer);
+
+peerServer.on('connection', (client) => {
+	console.log('PeerJS client connected:', client.getId());
+});
+
+peerServer.on('disconnect', (client) => {
+	console.log('PeerJS client disconnected:', client.getId());
+});
 
 // Socket.io connection handlers with JWT auth
 io.use((socket, next) => {
