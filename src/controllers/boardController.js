@@ -64,22 +64,37 @@ async function postPatches(req, res) {
 		const ownerId = req.user.id;
 		const boardId = req.params.boardId;
 		const { changes } = req.body || {};
-		if (!Array.isArray(changes)) return res.status(400).json({ error: 'changes[] required' });
+
+		if (!Array.isArray(changes)) {
+			return res.status(400).json({ error: 'changes[] required' });
+		}
+
+		if (changes.length === 0) {
+			return res.status(400).json({ error: 'changes array cannot be empty' });
+		}
+
         const result = await service.applyPatches({ id: boardId, ownerId, changes });
         if (!result) return res.status(404).json({ error: 'not found' });
+
+		// Broadcast changes to other users via WebSocket
         try {
             const io = req.app.get('io');
             if (io) {
-                io.to(`board:${boardId}`).emit('board:update', {
+                io.to(`board:${boardId}`).emit('board:patch', {
                     boardId,
-                    nodes: result.nodes,
-                    edges: result.edges,
-                    updatedAt: result.updated_at || new Date().toISOString(),
+                    userId: ownerId, // Echo prevention: Frontend can ignore own changes
+                    changes: result.changes,
+                    updatedAt: result.updatedAt,
                 });
             }
         } catch (_) {}
-        res.json(result);
+
+		res.json(result);
 	} catch (err) {
+		// Check if it's a validation error
+		if (err.message && err.message.includes('Validation failed')) {
+			return res.status(400).json({ error: err.message });
+		}
 		res.status(500).json({ error: err.message });
 	}
 }
@@ -91,17 +106,11 @@ async function putContent(req, res) {
 		const { nodes, edges } = req.body || {};
         const result = await service.overwriteContent({ id: boardId, ownerId, nodes: nodes || [], edges: edges || [] });
         if (!result) return res.status(404).json({ error: 'not found' });
-        try {
-            const io = req.app.get('io');
-            if (io) {
-                io.to(`board:${boardId}`).emit('board:update', {
-                    boardId,
-                    nodes: result.nodes,
-                    edges: result.edges,
-                    updatedAt: result.updated_at || new Date().toISOString(),
-                });
-            }
-        } catch (_) {}
+
+        // NOTE: No broadcast for full content updates
+        // Full overwrites are typically used for initial saves or bulk operations
+        // Real-time collaboration uses incremental patches instead
+
         res.json(result);
 	} catch (err) {
 		res.status(500).json({ error: err.message });
@@ -151,6 +160,19 @@ async function patchBoard(req, res) {
 				return res.status(400).json({ error: 'patches array cannot be empty' });
 			}
 			result = await service.applyPatches({ id: boardId, ownerId, changes: body.patches });
+
+			// Broadcast via WebSocket
+			try {
+				const io = req.app.get('io');
+				if (io) {
+					io.to(`board:${boardId}`).emit('board:patch', {
+						boardId,
+						userId: ownerId, // Echo prevention: Frontend can ignore own changes
+						changes: result.changes,
+						updatedAt: result.updatedAt,
+					});
+				}
+			} catch (_) {}
 		}
 		
 		// Handle full content update
@@ -176,6 +198,31 @@ async function patchBoard(req, res) {
 	}
 }
 
+// Simple save endpoint for auto-save (full state overwrite)
+async function saveBoard(req, res) {
+	try {
+		const ownerId = req.user.id;
+		const boardId = req.params.boardId;
+		const { nodes, edges } = req.body || {};
+
+		const result = await service.overwriteContent({ 
+			id: boardId, 
+			ownerId, 
+			nodes: nodes || [], 
+			edges: edges || [] 
+		});
+
+		if (!result) {
+			return res.status(404).json({ error: 'Board not found' });
+		}
+
+		res.json({ success: true, message: 'Board saved successfully' });
+	} catch (err) {
+		console.error('Save board error:', err);
+		res.status(500).json({ error: err.message });
+	}
+}
+
 module.exports = {
 	create,
 	listMine,
@@ -185,4 +232,5 @@ module.exports = {
 	postPatches,
 	putContent,
 	patchBoard,
+	saveBoard,
 };

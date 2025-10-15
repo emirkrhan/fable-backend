@@ -148,6 +148,17 @@ io.on('connection', (socket) => {
 		});
 	});
 
+	// Realtime: relay incremental patches immediately to board room
+	socket.on('board:patch', ({ boardId, changes }) => {
+		if (!boardId || !Array.isArray(changes) || changes.length === 0) return;
+		socket.to(`board:${boardId}`).emit('board:patch', {
+			boardId,
+			userId: socket.user.id,
+			changes,
+			updatedAt: new Date().toISOString(),
+		});
+	});
+
 	// Cursor move with lightweight server-side throttling
 	let lastCursorTs = 0;
 	socket.on('cursor:move', ({ x, y, color }) => {

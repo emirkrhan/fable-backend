@@ -18,7 +18,10 @@ router.put('/:boardId', canEditBoard, ctrl.rename);
 router.delete('/:boardId', canEditBoard, ctrl.remove);
 
 // Incremental patch (alternative endpoint)
-router.post('/:boardId/patches', ctrl.postPatches);
+router.post('/:boardId/patches', canEditBoard, ctrl.postPatches);
+
+// Simple save endpoint for auto-save
+router.post('/:boardId/save', canEditBoard, ctrl.saveBoard);
 
 // Full-state overwrite
 router.put('/:boardId/content', ctrl.putContent);
