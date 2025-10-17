@@ -95,6 +95,8 @@ io.use((socket, next) => {
 const activeCursors = new Map();
 // Store presence per room: roomId -> Map(userId -> presenceData)
 const activePresence = new Map();
+// Store voice room participants: boardId -> Map(userId -> voiceData)
+const voiceRoomParticipants = new Map();
 
 io.on('connection', (socket) => {
 	socket.on('join_board', async ({ boardId }) => {
@@ -203,6 +205,58 @@ io.on('connection', (socket) => {
 		socket.to(roomId).emit('cursor:update', cursorData);
 	});
 
+	// Voice room management
+	socket.on('voice:join', async ({ boardId, peerId }) => {
+		if (!boardId || !peerId) return;
+
+		const canView = await userCanViewBoard({ userId: socket.user.id, boardId });
+		if (!canView) {
+			socket.emit('error', { message: 'Access denied to board' });
+			return;
+		}
+
+		if (!voiceRoomParticipants.has(boardId)) {
+			voiceRoomParticipants.set(boardId, new Map());
+		}
+
+		const voiceData = {
+			userId: socket.user.id,
+			peerId: peerId,
+			joinedAt: Date.now()
+		};
+
+		voiceRoomParticipants.get(boardId).set(socket.user.id, voiceData);
+		socket.currentVoiceBoardId = boardId;
+
+		// Send current participants to the new joiner
+		const participants = Array.from(voiceRoomParticipants.get(boardId).values());
+		socket.emit('voice:participants:sync', participants);
+
+		// Notify others that this user joined
+		socket.to(`board:${boardId}`).emit('voice:user_joined', voiceData);
+
+		console.log(`User ${socket.user.id} joined voice room in board ${boardId}`);
+	});
+
+	socket.on('voice:leave', ({ boardId }) => {
+		if (!boardId) return;
+
+		if (voiceRoomParticipants.has(boardId)) {
+			voiceRoomParticipants.get(boardId).delete(socket.user.id);
+
+			socket.to(`board:${boardId}`).emit('voice:user_left', {
+				userId: socket.user.id
+			});
+
+			if (voiceRoomParticipants.get(boardId).size === 0) {
+				voiceRoomParticipants.delete(boardId);
+			}
+		}
+
+		socket.currentVoiceBoardId = null;
+		console.log(`User ${socket.user.id} left voice room in board ${boardId}`);
+	});
+
 	// Cleanup on disconnect
 	socket.on('disconnect', () => {
 		const boardId = socket.currentBoardId;
@@ -217,6 +271,18 @@ io.on('connection', (socket) => {
 			activePresence.get(roomId).delete(socket.user.id);
 			socket.to(roomId).emit('presence:remove', { userId: socket.user.id });
 			if (activePresence.get(roomId).size === 0) activePresence.delete(roomId);
+		}
+
+		// Cleanup voice room on disconnect
+		const voiceBoardId = socket.currentVoiceBoardId;
+		if (voiceBoardId && voiceRoomParticipants.has(voiceBoardId)) {
+			voiceRoomParticipants.get(voiceBoardId).delete(socket.user.id);
+			socket.to(`board:${voiceBoardId}`).emit('voice:user_left', {
+				userId: socket.user.id
+			});
+			if (voiceRoomParticipants.get(voiceBoardId).size === 0) {
+				voiceRoomParticipants.delete(voiceBoardId);
+			}
 		}
 	});
 });
