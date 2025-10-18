@@ -3,6 +3,9 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 require('dotenv').config();
+// Read allowed CORS origins from environment (comma-separated)
+const rawCorsOrigins = process.env.CORS_ORIGINS || 'http://localhost:3000,http://localhost:3001,http://localhost:3002';
+const ALLOWED_ORIGINS = rawCorsOrigins.split(',').map(o => o.trim()).filter(Boolean);
 const { pool, checkConnection, ensureSchema } = require('./db');
 const { ensureDemoUser } = require('./seed/demoUser');
 const boardsRouter = require('./routes/boards');
@@ -24,7 +27,7 @@ if (!fs.existsSync(UPLOADS_DIR)) {
 }
 app.use('/uploads', express.static(UPLOADS_DIR));
 app.use(cors({
-	origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002'],
+	origin: ALLOWED_ORIGINS,
 	credentials: true,
 	methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
 	allowedHeaders: ['Content-Type', 'Authorization']
@@ -33,7 +36,7 @@ app.use(express.json());
 const PORT = process.env.PORT || 4000;
 const io = new Server(server, {
 	cors: {
-		origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002'],
+		origin: ALLOWED_ORIGINS,
 		credentials: true
 	},
 	pingInterval: 25000, // Send ping every 25 seconds
