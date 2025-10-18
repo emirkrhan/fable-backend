@@ -11,6 +11,7 @@ const { ensureDemoUser } = require('./seed/demoUser');
 const boardsRouter = require('./routes/boards');
 const usersRouter = require('./routes/users');
 const authRouter = require('./routes/auth');
+const pkg = require('../package.json');
 
 const app = express();
 const http = require('http');
@@ -58,6 +59,16 @@ app.get('/db/health', async (req, res) => {
 	} catch (err) {
 		res.status(500).json({ database: 'down', error: err.message });
 	}
+});
+
+app.get('/healthz', (req, res) => {
+	res.json({
+		status: 'ok',
+		service: 'story-back',
+		version: pkg.version || '0.0.0',
+		uptime: Math.round(process.uptime()),
+		timestamp: new Date().toISOString()
+	});
 });
 
 app.use('/api/boards', boardsRouter);
