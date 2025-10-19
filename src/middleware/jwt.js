@@ -8,7 +8,7 @@ function jwtAuth(req, res, next) {
 	if (!token) return res.status(401).json({ error: 'Missing bearer token' });
 	try {
 		const payload = jwt.verify(token, JWT_SECRET);
-		req.user = { id: payload.sub, email: payload.email, name: payload.name };
+		req.user = { id: payload.sub, email: payload.email, name: payload.name, role: payload.role };
 		next();
 	} catch (err) {
 		return res.status(401).json({ error: 'Unauthorized' });

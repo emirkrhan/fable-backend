@@ -11,18 +11,18 @@ async function findUserByEmail(email) {
 	return rows[0] || null;
 }
 
-async function createUser({ email, name, password }) {
+async function createUser({ email, name, password, role = 'user' }) {
 	const id = uuidv4();
 	const passwordHash = await bcrypt.hash(password, 10);
 	const { rows } = await pool.query(
-		`insert into users (id, email, name, password_hash) values ($1, $2, $3, $4) returning *`,
-		[id, email, name || null, passwordHash]
+		`insert into users (id, email, name, password_hash, role) values ($1, $2, $3, $4, $5) returning *`,
+		[id, email, name || null, passwordHash, role]
 	);
 	return rows[0];
 }
 
 function signToken(user) {
-	return jwt.sign({ sub: user.id, email: user.email, name: user.name }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+	return jwt.sign({ sub: user.id, email: user.email, name: user.name, role: user.role }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 }
 
 async function register({ email, name, password }) {
@@ -30,7 +30,7 @@ async function register({ email, name, password }) {
 	if (existing) throw new Error('Email already in use');
 	const user = await createUser({ email, name, password });
 	const token = signToken(user);
-	return { user: { id: user.id, email: user.email, name: user.name }, token };
+	return { user: { id: user.id, email: user.email, name: user.name, role: user.role }, token };
 }
 
 async function login({ email, password }) {
@@ -39,7 +39,7 @@ async function login({ email, password }) {
 	const ok = await bcrypt.compare(password, user.password_hash);
 	if (!ok) throw new Error('Invalid credentials');
 	const token = signToken(user);
-	return { user: { id: user.id, email: user.email, name: user.name }, token };
+	return { user: { id: user.id, email: user.email, name: user.name, role: user.role }, token };
 }
 
 module.exports = { register, login, findUserByEmail, createUser };

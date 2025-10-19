@@ -26,6 +26,7 @@ async function ensureSchema() {
 			name text,
 			password_hash text not null,
 			avatar_url text,
+			role text not null default 'user',
 			created_at timestamptz not null default now()
 		);
 		create table if not exists boards (
@@ -50,6 +51,8 @@ async function ensureSchema() {
 		create index if not exists idx_board_shares_board on board_shares(board_id);
 		-- Ensure avatar_url exists on existing databases
 		alter table if exists users add column if not exists avatar_url text;
+		-- Ensure role exists on existing databases
+		alter table if exists users add column if not exists role text not null default 'user';
 		create index if not exists idx_boards_owner on boards(owner_id);
 	`);
 }

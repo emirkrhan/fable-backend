@@ -4,13 +4,15 @@ const path = require('path');
 const fs = require('fs');
 require('dotenv').config();
 // Read allowed CORS origins from environment (comma-separated)
-const rawCorsOrigins = process.env.CORS_ORIGINS || 'http://localhost:3000,http://localhost:3001,http://localhost:3002';
+//const rawCorsOrigins = process.env.CORS_ORIGINS || 'http://localhost:3000,http://localhost:3001,http://localhost:3002';
+const rawCorsOrigins = 'http://localhost:3000,http://localhost:3001,http://localhost:3002';
 const ALLOWED_ORIGINS = rawCorsOrigins.split(',').map(o => o.trim()).filter(Boolean);
 const { pool, checkConnection, ensureSchema } = require('./db');
 const { ensureDemoUser } = require('./seed/demoUser');
 const boardsRouter = require('./routes/boards');
 const usersRouter = require('./routes/users');
 const authRouter = require('./routes/auth');
+const adminRouter = require('./routes/admin');
 const pkg = require('../package.json');
 
 const app = express();
@@ -73,6 +75,7 @@ app.get('/healthz', (req, res) => {
 
 app.use('/api/boards', boardsRouter);
 app.use('/api/users', usersRouter);
+app.use('/api/admin', adminRouter);
 app.use(authRouter);
 
 // PeerJS Server Configuration
