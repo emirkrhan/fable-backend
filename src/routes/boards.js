@@ -31,6 +31,15 @@ router.post('/:boardId/share', canEditBoard, shareCtrl.shareWithEmail);
 router.get('/:boardId/shares', canEditBoard, shareCtrl.listShares);
 router.delete('/:boardId/shares/:userId', canEditBoard, shareCtrl.deleteShare);
 
-// Listing route defined above
+// Chats endpoints
+const chatCtrl = require('../controllers/chatController');
+router.get('/:boardId/chats', canViewBoard, chatCtrl.listChats);
+router.post('/:boardId/chats', canEditBoard, chatCtrl.createChat);
+router.get('/:boardId/chats/:chatId/messages', canViewBoard, chatCtrl.listMessages);
+router.post('/:boardId/chats/:chatId/messages', canEditBoard, chatCtrl.createMessage);
+router.delete('/:boardId/chats/:chatId', canEditBoard, chatCtrl.deleteChat);
+
+// AI usage stats endpoint
+router.get('/ai/usage-stats', chatCtrl.getUsageStats);
 
 module.exports = router;

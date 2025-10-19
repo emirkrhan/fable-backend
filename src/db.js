@@ -54,6 +54,41 @@ async function ensureSchema() {
 		-- Ensure role exists on existing databases
 		alter table if exists users add column if not exists role text not null default 'user';
 		create index if not exists idx_boards_owner on boards(owner_id);
+
+		-- Chats per board
+		create table if not exists chats (
+			id uuid primary key,
+			board_id uuid not null,
+			title text not null default 'New chat',
+			created_at timestamptz not null default now()
+		);
+		create index if not exists idx_chats_board on chats(board_id);
+
+		-- Messages per chat
+		create table if not exists chat_messages (
+			id uuid primary key,
+			chat_id uuid not null,
+			role text not null check (role in ('user','assistant','system')),
+			content text not null,
+			created_at timestamptz not null default now()
+		);
+		create index if not exists idx_messages_chat on chat_messages(chat_id);
+
+		-- Add user_id to chat_messages for tracking who sent the message
+		alter table if exists chat_messages add column if not exists user_id uuid;
+		create index if not exists idx_messages_user_date on chat_messages(user_id, created_at);
+
+		-- Daily AI usage tracking table
+		create table if not exists daily_ai_usage (
+			id uuid primary key default gen_random_uuid(),
+			user_id uuid not null references users(id) on delete cascade,
+			usage_date date not null default current_date,
+			message_count integer not null default 0,
+			created_at timestamptz not null default now(),
+			updated_at timestamptz not null default now(),
+			unique(user_id, usage_date)
+		);
+		create index if not exists idx_daily_usage_user_date on daily_ai_usage(user_id, usage_date);
 	`);
 }
 
