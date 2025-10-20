@@ -6,7 +6,7 @@ async function findUserByEmail(email) {
 	return rows[0] || null;
 }
 
-async function shareBoardWithEmail({ boardId, ownerId, email }) {
+async function shareBoardWithEmail({ boardId, ownerId, email, role = 'viewer' }) {
 	// Verify board ownership
 	const { rows: boardRows } = await pool.query('select id, owner_id from boards where id = $1', [boardId]);
 	if (!boardRows[0]) throw new Error('Board not found');
@@ -16,12 +16,17 @@ async function shareBoardWithEmail({ boardId, ownerId, email }) {
 	if (!user) return { status: 'not_found' };
 	if (user.id === ownerId) return { status: 'invalid_self_share' };
 
+	// Validate role
+	if (!['viewer', 'editor'].includes(role)) {
+		role = 'viewer';
+	}
+
 	const { rows } = await pool.query(
 		`insert into board_shares (id, board_id, user_id, role)
-		 values ($1, $2, $3, 'viewer')
+		 values ($1, $2, $3, $4)
 		 on conflict (board_id, user_id) do update set role = excluded.role
 		 returning *`,
-		[uuidv4(), boardId, user.id]
+		[uuidv4(), boardId, user.id, role]
 	);
 	return { status: 'ok', share: rows[0], user };
 }
@@ -100,7 +105,13 @@ async function userCanViewBoard({ userId, boardId }) {
 }
 
 async function userCanEditBoard({ userId, boardId }) {
-    const { rows } = await pool.query('select 1 from boards where id = $1::uuid and owner_id = $2', [boardId, userId]);
+    const { rows } = await pool.query(
+		`select 1 from boards where id = $1::uuid and owner_id = $2
+		 union all
+		 select 1 from board_shares where board_id = $1::uuid and user_id = $2::uuid and role = 'editor'
+		 limit 1`,
+		[boardId, userId]
+	);
 	return !!rows[0];
 }
 
@@ -136,6 +147,25 @@ async function removeShare({ boardId, ownerId, userId }) {
 	return rowCount > 0;
 }
 
+async function updateShareRole({ boardId, ownerId, userId, role = 'viewer' }) {
+	// Verify board ownership
+	const { rows: boardRows } = await pool.query('select id, owner_id from boards where id = $1', [boardId]);
+	if (!boardRows[0]) throw new Error('Board not found');
+	if (boardRows[0].owner_id !== ownerId) throw new Error('Forbidden');
+
+	// Validate role
+	if (!['viewer', 'editor'].includes(role)) {
+		role = 'viewer';
+	}
+
+	const { rows } = await pool.query(
+		`update board_shares set role = $1 where board_id = $2::uuid and user_id = $3::uuid returning *`,
+		[role, boardId, userId]
+	);
+	if (!rows[0]) throw new Error('Share not found');
+	return rows[0];
+}
+
 module.exports = {
 	shareBoardWithEmail,
 	listBoardsForUser,
@@ -143,6 +173,7 @@ module.exports = {
 	userCanEditBoard,
 	listBoardShares,
 	removeShare,
+	updateShareRole,
 };
 
 

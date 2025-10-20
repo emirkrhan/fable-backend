@@ -2,13 +2,20 @@ const { pool } = require('../db');
 const { v4: uuidv4 } = require('uuid');
 
 // Helper: Add permission field to board data
-function addPermissionField(boardData, userId) {
+async function addPermissionField(boardData, userId) {
 	if (!boardData) return null;
-	// If board has owner_id and it matches userId, they're the owner
-	return {
-		...boardData,
-		permission: boardData.owner_id === userId ? 'owner' : 'view'
-	};
+
+	if (boardData.owner_id === userId) {
+		return { ...boardData, permission: 'owner' };
+	}
+
+	const { rows } = await pool.query(
+		'SELECT role FROM board_shares WHERE board_id = $1 AND user_id = $2',
+		[boardData.id, userId]
+	);
+
+	const permission = rows[0]?.role || 'viewer';
+	return { ...boardData, permission };
 }
 
 async function createBoard({ ownerId, name }) {
@@ -19,7 +26,7 @@ async function createBoard({ ownerId, name }) {
 		 returning *`,
 		[id, name, ownerId]
 	);
-	return addPermissionField(rows[0], ownerId);
+	return await addPermissionField(rows[0], ownerId);
 }
 
 async function getBoardById({ id, ownerId }) {
@@ -27,7 +34,7 @@ async function getBoardById({ id, ownerId }) {
         `select * from boards where id = $1::uuid and owner_id = $2`,
         [id, ownerId]
     );
-    return addPermissionField(rows[0], ownerId);
+    return await addPermissionField(rows[0], ownerId);
 }
 
 async function getBoardByIdForUser({ id, userId }) {
@@ -35,7 +42,7 @@ async function getBoardByIdForUser({ id, userId }) {
         `select * from boards where id = $1::uuid`,
         [id]
     );
-    return addPermissionField(rows[0], userId);
+    return await addPermissionField(rows[0], userId);
 }
 
 async function listBoards({ ownerId }) {
@@ -43,7 +50,7 @@ async function listBoards({ ownerId }) {
 		`select * from boards where owner_id = $1 order by updated_at desc`,
 		[ownerId]
 	);
-	return rows.map(board => addPermissionField(board, ownerId));
+	return await Promise.all(rows.map(board => addPermissionField(board, ownerId)));
 }
 
 async function updateBoardName({ id, ownerId, name }) {
@@ -51,7 +58,7 @@ async function updateBoardName({ id, ownerId, name }) {
         `update boards set name = $3, updated_at = now() where id = $1::uuid and owner_id = $2 returning *`,
 		[id, ownerId, name]
 	);
-	return addPermissionField(rows[0], ownerId);
+	return await addPermissionField(rows[0], ownerId);
 }
 
 async function deleteBoard({ id, ownerId }) {
@@ -416,17 +423,16 @@ async function applyPatches({ id, ownerId, changes }) {
 async function overwriteContent({ id, ownerId, nodes, edges }) {
 	const client = await pool.connect();
 	try {
-		// Use SERIALIZABLE isolation to prevent concurrent overwrites
 		await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
 
 		const { rows } = await client.query(
-			`update boards set nodes = $3::jsonb, edges = $4::jsonb, updated_at = now()
-			 where id = $1::uuid and owner_id = $2 returning *`,
-			[id, ownerId, JSON.stringify(nodes || []), JSON.stringify(edges || [])]
+			`update boards set nodes = $2::jsonb, edges = $3::jsonb, updated_at = now()
+			 where id = $1::uuid returning *`,
+			[id, JSON.stringify(nodes || []), JSON.stringify(edges || [])]
 		);
 
 		await client.query('COMMIT');
-		return addPermissionField(rows[0], ownerId);
+		return await addPermissionField(rows[0], ownerId);
 	} catch (err) {
 		await client.query('ROLLBACK');
 		throw err;

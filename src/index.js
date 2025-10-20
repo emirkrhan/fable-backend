@@ -4,8 +4,8 @@ const path = require('path');
 const fs = require('fs');
 require('dotenv').config();
 // Read allowed CORS origins from environment (comma-separated)
-const rawCorsOrigins = process.env.CORS_ORIGINS || 'http://localhost:3000,http://localhost:3001,http://localhost:3002';
-//const rawCorsOrigins = 'http://localhost:3000,http://localhost:3001,http://localhost:3002';
+//const rawCorsOrigins = process.env.CORS_ORIGINS || 'http://localhost:3000,http://localhost:3001,http://localhost:3002';
+const rawCorsOrigins = 'http://localhost:3000,http://localhost:3001,http://localhost:3002';
 const ALLOWED_ORIGINS = rawCorsOrigins.split(',').map(o => o.trim()).filter(Boolean);
 const { pool, checkConnection, ensureSchema } = require('./db');
 const { ensureDemoUser } = require('./seed/demoUser');
@@ -13,6 +13,7 @@ const boardsRouter = require('./routes/boards');
 const usersRouter = require('./routes/users');
 const authRouter = require('./routes/auth');
 const adminRouter = require('./routes/admin');
+const uploadRouter = require('./routes/upload');
 const pkg = require('../package.json');
 
 const app = express();
@@ -76,6 +77,7 @@ app.get('/healthz', (req, res) => {
 app.use('/api/boards', boardsRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/upload', uploadRouter);
 app.use(authRouter);
 
 // PeerJS Server Configuration
@@ -114,6 +116,8 @@ const activeCursors = new Map();
 const activePresence = new Map();
 // Store voice room participants: boardId -> Map(userId -> voiceData)
 const voiceRoomParticipants = new Map();
+// Store card locks: boardId -> Map(cardId -> { userId, userName, timestamp })
+const cardLocks = new Map();
 
 io.on('connection', (socket) => {
 	socket.on('join_board', async ({ boardId }) => {
@@ -198,6 +202,91 @@ io.on('connection', (socket) => {
 			changes,
 			updatedAt: new Date().toISOString(),
 		});
+	});
+
+	// Real-time node changes sync (for viewers to see owner's edits)
+	socket.on('board:sync_nodes', ({ boardId, changes }) => {
+		if (!boardId || !Array.isArray(changes) || changes.length === 0) return;
+		socket.to(`board:${boardId}`).emit('board:sync_nodes', {
+			boardId,
+			userId: socket.user.id,
+			changes,
+			timestamp: Date.now(),
+		});
+	});
+
+	// Real-time edge changes sync (for viewers to see owner's edge edits)
+	socket.on('board:sync_edges', ({ boardId, changes }) => {
+		if (!boardId || !Array.isArray(changes) || changes.length === 0) return;
+		socket.to(`board:${boardId}`).emit('board:sync_edges', {
+			boardId,
+			userId: socket.user.id,
+			changes,
+			timestamp: Date.now(),
+		});
+	});
+
+	// Real-time drag position sync (throttled, for viewers to see dragging in progress)
+	let lastDragTs = 0;
+	socket.on('board:drag_position', ({ boardId, nodeId, position, isDragging }) => {
+		if (!boardId) return;
+		const now = Date.now();
+		// Throttle drag updates to ~60fps (16ms) for smooth dragging
+		if (isDragging && now - lastDragTs < 16) return;
+		lastDragTs = now;
+
+		socket.to(`board:${boardId}`).emit('board:drag_position', {
+			boardId,
+			userId: socket.user.id,
+			nodeId,
+			position,
+			isDragging,
+			timestamp: now,
+		});
+	});
+
+	// Card lock handlers
+	socket.on('card:start_edit', ({ boardId, cardId }) => {
+		if (!boardId || !cardId) return;
+
+		if (!cardLocks.has(boardId)) {
+			cardLocks.set(boardId, new Map());
+		}
+
+		const locks = cardLocks.get(boardId);
+		const existingLock = locks.get(cardId);
+
+		if (existingLock && existingLock.userId !== socket.user.id) {
+			socket.emit('card:locked', {
+				cardId,
+				userId: existingLock.userId,
+				userName: existingLock.userName
+			});
+		} else {
+			locks.set(cardId, {
+				userId: socket.user.id,
+				userName: socket.user.name,
+				timestamp: Date.now()
+			});
+			socket.to(`board:${boardId}`).emit('card:lock_acquired', {
+				cardId,
+				userId: socket.user.id,
+				userName: socket.user.name
+			});
+		}
+	});
+
+	socket.on('card:stop_edit', ({ boardId, cardId }) => {
+		if (!boardId || !cardId) return;
+
+		const locks = cardLocks.get(boardId);
+		if (locks) {
+			const lock = locks.get(cardId);
+			if (lock && lock.userId === socket.user.id) {
+				locks.delete(cardId);
+				socket.to(`board:${boardId}`).emit('card:lock_released', { cardId });
+			}
+		}
 	});
 
 	// Cursor move with lightweight server-side throttling
@@ -288,6 +377,22 @@ io.on('connection', (socket) => {
 			activePresence.get(roomId).delete(socket.user.id);
 			socket.to(roomId).emit('presence:remove', { userId: socket.user.id });
 			if (activePresence.get(roomId).size === 0) activePresence.delete(roomId);
+		}
+
+		// Release all card locks held by this user
+		if (cardLocks.has(boardId)) {
+			const locks = cardLocks.get(boardId);
+			const releasedCards = [];
+			for (const [cardId, lock] of locks.entries()) {
+				if (lock.userId === socket.user.id) {
+					locks.delete(cardId);
+					releasedCards.push(cardId);
+				}
+			}
+			releasedCards.forEach(cardId => {
+				socket.to(`board:${boardId}`).emit('card:lock_released', { cardId });
+			});
+			if (locks.size === 0) cardLocks.delete(boardId);
 		}
 
 		// Cleanup voice room on disconnect

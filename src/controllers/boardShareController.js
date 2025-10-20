@@ -1,4 +1,4 @@
-const { shareBoardWithEmail, listBoardsForUser, userCanViewBoard, listBoardShares, removeShare } = require('../services/boardShareService');
+const { shareBoardWithEmail, listBoardsForUser, userCanViewBoard, listBoardShares, removeShare, updateShareRole } = require('../services/boardShareService');
 
 // Middleware: attach permission (owner/viewer) onto req for downstream handlers if needed
 async function attachPermission(req, res, next) {
@@ -15,11 +15,11 @@ async function attachPermission(req, res, next) {
 
 async function shareWithEmail(req, res) {
 	try {
-		const { email } = req.body || {};
+		const { email, role } = req.body || {};
 		if (!email) return res.status(400).json({ error: 'email is required' });
 		const boardId = req.params.boardId;
 		const ownerId = req.user.id;
-		const result = await shareBoardWithEmail({ boardId, ownerId, email });
+		const result = await shareBoardWithEmail({ boardId, ownerId, email, role });
 		if (result.status === 'not_found') return res.status(404).json({ error: 'User not found' });
 		if (result.status === 'invalid_self_share') return res.status(400).json({ error: 'cannot share to yourself' });
 		return res.status(200).json({ share: result.share, user: result.user });
@@ -66,6 +66,23 @@ async function deleteShare(req, res) {
 	}
 }
 
-module.exports = { shareWithEmail, listForCurrentUser, attachPermission, listShares, deleteShare };
+async function updateShare(req, res) {
+	try {
+		const boardId = req.params.boardId;
+		const userId = req.params.userId;
+		const ownerId = req.user.id;
+		const { role } = req.body || {};
+		if (!role) return res.status(400).json({ error: 'role is required' });
+		const updated = await updateShareRole({ boardId, ownerId, userId, role });
+		res.json(updated);
+	} catch (err) {
+		if (err.message === 'Board not found') return res.status(404).json({ error: err.message });
+		if (err.message === 'Forbidden') return res.status(403).json({ error: err.message });
+		if (err.message === 'Share not found') return res.status(404).json({ error: err.message });
+		res.status(500).json({ error: err.message });
+	}
+}
+
+module.exports = { shareWithEmail, listForCurrentUser, attachPermission, listShares, deleteShare, updateShare };
 
 

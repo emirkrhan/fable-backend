@@ -29,6 +29,7 @@ router.put('/:boardId/content', ctrl.putContent);
 // Sharing endpoints
 router.post('/:boardId/share', canEditBoard, shareCtrl.shareWithEmail);
 router.get('/:boardId/shares', canEditBoard, shareCtrl.listShares);
+router.patch('/:boardId/shares/:userId', canEditBoard, shareCtrl.updateShare);
 router.delete('/:boardId/shares/:userId', canEditBoard, shareCtrl.deleteShare);
 
 // Chats endpoints
