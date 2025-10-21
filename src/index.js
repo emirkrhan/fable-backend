@@ -14,6 +14,7 @@ const usersRouter = require('./routes/users');
 const authRouter = require('./routes/auth');
 const adminRouter = require('./routes/admin');
 const uploadRouter = require('./routes/upload');
+const premiumCodeService = require('./services/premiumCodeService');
 const pkg = require('../package.json');
 
 const app = express();
@@ -428,6 +429,25 @@ setInterval(() => {
 	try {
 		await ensureSchema();
 		await ensureDemoUser();
+
+		// Check expired premium users every hour
+		setInterval(async () => {
+			try {
+				const expired = await premiumCodeService.checkExpiredPremiums();
+				if (expired.length > 0) {
+					console.log(`Downgraded ${expired.length} expired premium users`);
+				}
+			} catch (err) {
+				console.error('Failed to check expired premiums:', err);
+			}
+		}, 60 * 60 * 1000); // Every hour
+
+		// Run once on startup
+		const expired = await premiumCodeService.checkExpiredPremiums();
+		if (expired.length > 0) {
+			console.log(`Downgraded ${expired.length} expired premium users on startup`);
+		}
+
 		server.listen(PORT, () => {
 			console.log(`Server running at http://localhost:${PORT}`);
 		});

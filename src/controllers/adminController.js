@@ -1,4 +1,5 @@
 const admin = require('../services/adminService');
+const premiumCodeService = require('../services/premiumCodeService');
 
 async function getAllUsers(req, res) {
 	try {
@@ -71,6 +72,46 @@ async function getStatistics(req, res) {
 	}
 }
 
+async function createPremiumCode(req, res) {
+	try {
+		const { durationDays, customCode, usageLimit } = req.body;
+		if (!durationDays || durationDays < 1) {
+			return res.status(400).json({ error: 'durationDays must be at least 1' });
+		}
+		if (usageLimit && usageLimit < 1) {
+			return res.status(400).json({ error: 'usageLimit must be at least 1' });
+		}
+		const code = await premiumCodeService.createPremiumCode(
+			req.user.id,
+			durationDays,
+			customCode,
+			usageLimit || 1
+		);
+		res.json(code);
+	} catch (err) {
+		res.status(400).json({ error: err.message });
+	}
+}
+
+async function getAllPremiumCodes(req, res) {
+	try {
+		const codes = await premiumCodeService.getAllPremiumCodes();
+		res.json(codes);
+	} catch (err) {
+		res.status(500).json({ error: err.message });
+	}
+}
+
+async function deletePremiumCode(req, res) {
+	try {
+		const { codeId } = req.params;
+		await premiumCodeService.deletePremiumCode(codeId);
+		res.json({ success: true });
+	} catch (err) {
+		res.status(400).json({ error: err.message });
+	}
+}
+
 module.exports = {
 	getAllUsers,
 	updateUserRole,
@@ -79,4 +120,7 @@ module.exports = {
 	updateBoardName,
 	deleteBoard,
 	getStatistics,
+	createPremiumCode,
+	getAllPremiumCodes,
+	deletePremiumCode,
 };

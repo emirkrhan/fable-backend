@@ -20,4 +20,9 @@ router.delete('/boards/:boardId', ctrl.deleteBoard);
 // Statistics
 router.get('/stats', ctrl.getStatistics);
 
+// Premium codes management
+router.post('/premium-codes', ctrl.createPremiumCode);
+router.get('/premium-codes', ctrl.getAllPremiumCodes);
+router.delete('/premium-codes/:codeId', ctrl.deletePremiumCode);
+
 module.exports = router;

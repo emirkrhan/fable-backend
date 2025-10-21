@@ -1,6 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 const { getUserById, updateUserAvatar, clearUserAvatar } = require('../services/userService');
+const premiumCodeService = require('../services/premiumCodeService');
 
 async function me(req, res) {
 	const user = await getUserById(req.user.id);
@@ -26,6 +27,19 @@ async function deleteAvatar(req, res) {
 	return res.status(200).json({ user: updated });
 }
 
-module.exports = { me, uploadAvatar, deleteAvatar };
+async function redeemCode(req, res) {
+	try {
+		const { code } = req.body;
+		if (!code) {
+			return res.status(400).json({ error: 'Code is required' });
+		}
+		const result = await premiumCodeService.redeemPremiumCode(code, req.user.id);
+		res.json(result);
+	} catch (err) {
+		res.status(400).json({ error: err.message });
+	}
+}
+
+module.exports = { me, uploadAvatar, deleteAvatar, redeemCode };
 
 

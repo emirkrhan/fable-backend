@@ -2,8 +2,8 @@ const { pool } = require('../db');
 
 // Daily message limits based on user role
 const MESSAGE_LIMITS = {
-	user: 5,
-	premium: 50,
+	user: 10,
+	premium: 100,
 	admin: 999999 // Unlimited for admins
 };
 

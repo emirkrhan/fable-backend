@@ -89,6 +89,40 @@ async function ensureSchema() {
 			unique(user_id, usage_date)
 		);
 		create index if not exists idx_daily_usage_user_date on daily_ai_usage(user_id, usage_date);
+
+		-- Premium codes table
+		create table if not exists premium_codes (
+			id uuid primary key default gen_random_uuid(),
+			code text not null unique,
+			duration_days integer not null,
+			usage_limit integer not null default 1,
+			usage_count integer not null default 0,
+			created_by uuid not null references users(id),
+			created_at timestamptz not null default now(),
+			is_used boolean not null default false,
+			used_by uuid references users(id),
+			used_at timestamptz
+		);
+		create index if not exists idx_premium_codes_code on premium_codes(code);
+		create index if not exists idx_premium_codes_used on premium_codes(is_used);
+
+		-- Add usage_limit and usage_count to existing codes
+		alter table if exists premium_codes add column if not exists usage_limit integer not null default 1;
+		alter table if exists premium_codes add column if not exists usage_count integer not null default 0;
+
+		-- Track who used each code (multiple users possible)
+		create table if not exists premium_code_usage (
+			id uuid primary key default gen_random_uuid(),
+			code_id uuid not null references premium_codes(id) on delete cascade,
+			user_id uuid not null references users(id) on delete cascade,
+			redeemed_at timestamptz not null default now(),
+			unique(code_id, user_id)
+		);
+		create index if not exists idx_code_usage_code on premium_code_usage(code_id);
+		create index if not exists idx_code_usage_user on premium_code_usage(user_id);
+
+		-- Add premium expiry to users table
+		alter table if exists users add column if not exists premium_expires_at timestamptz;
 	`);
 }
 

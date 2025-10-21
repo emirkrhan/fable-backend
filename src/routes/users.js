@@ -37,6 +37,9 @@ router.post('/me/avatar', upload.single('avatar'), ctrl.uploadAvatar);
 // DELETE /api/users/me/avatar -> avatarı temizle
 router.delete('/me/avatar', ctrl.deleteAvatar);
 
+// POST /api/users/me/redeem-code -> redeem premium code
+router.post('/me/redeem-code', ctrl.redeemCode);
+
 module.exports = router;
 
 
