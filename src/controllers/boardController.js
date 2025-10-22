@@ -8,7 +8,8 @@ async function create(req, res) {
 		const board = await service.createBoard({ ownerId, name });
 		res.status(201).json(board);
 	} catch (err) {
-		res.status(500).json({ error: err.message });
+		console.error('Board create error:', err);
+		res.status(500).json({ error: 'Failed to create board' });
 	}
 }
 
@@ -18,7 +19,8 @@ async function listMine(req, res) {
 		const boards = await service.listBoards({ ownerId });
 		res.json(boards);
 	} catch (err) {
-		res.status(500).json({ error: err.message });
+		console.error('Board list error:', err);
+		res.status(500).json({ error: 'Failed to load boards' });
 	}
 }
 
@@ -27,10 +29,11 @@ async function getById(req, res) {
         const userId = req.user.id;
         const boardId = req.params.boardId;
         const board = await service.getBoardByIdForUser({ id: boardId, userId });
-		if (!board) return res.status(404).json({ error: 'not found' });
+		if (!board) return res.status(404).json({ error: 'Board not found' });
 		res.json(board);
 	} catch (err) {
-		res.status(500).json({ error: err.message });
+		console.error('Board get error:', err);
+		res.status(500).json({ error: 'Failed to load board' });
 	}
 }
 
@@ -41,10 +44,11 @@ async function rename(req, res) {
 		const { name } = req.body || {};
 		if (!name) return res.status(400).json({ error: 'name is required' });
 		const board = await service.updateBoardName({ id: boardId, ownerId, name });
-		if (!board) return res.status(404).json({ error: 'not found' });
+		if (!board) return res.status(404).json({ error: 'Board not found' });
 		res.json(board);
 	} catch (err) {
-		res.status(500).json({ error: err.message });
+		console.error('Board rename error:', err);
+		res.status(500).json({ error: 'Failed to rename board' });
 	}
 }
 
@@ -55,7 +59,8 @@ async function remove(req, res) {
 		await service.deleteBoard({ id: boardId, ownerId });
 		res.status(204).end();
 	} catch (err) {
-		res.status(500).json({ error: err.message });
+		console.error('Board delete error:', err);
+		res.status(500).json({ error: 'Failed to delete board' });
 	}
 }
 

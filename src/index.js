@@ -4,8 +4,8 @@ const path = require('path');
 const fs = require('fs');
 require('dotenv').config();
 // Read allowed CORS origins from environment (comma-separated)
-//const rawCorsOrigins = process.env.CORS_ORIGINS || 'http://localhost:3000,http://localhost:3001,http://localhost:3002';
-const rawCorsOrigins = 'http://localhost:3000,http://localhost:3001,http://localhost:3002';
+const rawCorsOrigins = process.env.CORS_ORIGINS || 'http://localhost:3000,http://localhost:3001,http://localhost:3002';
+//const rawCorsOrigins = 'http://localhost:3000,http://localhost:3001,http://localhost:3002';
 const ALLOWED_ORIGINS = rawCorsOrigins.split(',').map(o => o.trim()).filter(Boolean);
 const { pool, checkConnection, ensureSchema } = require('./db');
 const { ensureDemoUser } = require('./seed/demoUser');
@@ -24,7 +24,14 @@ const { ExpressPeerServer } = require('peer');
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const { userCanViewBoard } = require('./services/boardShareService');
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
+
+// JWT_SECRET is required for production security
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+	console.error('❌ FATAL: JWT_SECRET environment variable is not set!');
+	console.error('Please set JWT_SECRET in your .env file for production security.');
+	process.exit(1);
+}
 // Ensure uploads directory exists and serve it statically
 const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(UPLOADS_DIR)) {
@@ -100,19 +107,11 @@ app.use(authRouter);
 
 // PeerJS Server Configuration
 const peerServer = ExpressPeerServer(server, {
-	debug: true,
+	debug: process.env.NODE_ENV === 'development',
 	path: '/',
-	allow_discovery: true
+	allow_discovery: false
 });
 app.use('/peerjs', peerServer);
-
-peerServer.on('connection', (client) => {
-	console.log('PeerJS client connected:', client.getId());
-});
-
-peerServer.on('disconnect', (client) => {
-	console.log('PeerJS client disconnected:', client.getId());
-});
 
 // Socket.io connection handlers with JWT auth
 io.use((socket, next) => {

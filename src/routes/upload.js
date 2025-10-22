@@ -3,6 +3,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
+const { jwtAuth } = require('../middleware/jwt');
 const router = express.Router();
 
 const storage = multer.diskStorage({
@@ -30,33 +31,38 @@ const upload = multer({
 	}
 });
 
-router.post('/image', upload.single('image'), (req, res) => {
-	console.log('Upload request received:', req.file);
+router.post('/image', jwtAuth, upload.single('image'), (req, res) => {
 	if (!req.file) {
-		console.log('No file in request');
 		return res.status(400).json({ error: 'No file uploaded' });
 	}
 	const url = `/uploads/${req.file.filename}`;
-	console.log('Upload successful:', url);
 	res.json({ url });
 });
 
-router.delete('/image', (req, res) => {
+router.delete('/image', jwtAuth, (req, res) => {
 	const { url } = req.body;
-	if (!url) {
-		return res.status(400).json({ error: 'No URL provided' });
+	if (!url || !url.startsWith('/uploads/')) {
+		return res.status(400).json({ error: 'Invalid URL' });
 	}
 
-	// Extract filename from URL (e.g., /uploads/abc-123.jpg -> abc-123.jpg)
-	const filename = url.split('/').pop();
+	// Extract filename safely (prevent path traversal)
+	const filename = path.basename(url);
+	if (filename.includes('..') || filename.includes('/')) {
+		return res.status(400).json({ error: 'Invalid filename' });
+	}
+
 	const filePath = path.join(__dirname, '../../uploads', filename);
+
+	// Ensure file is within uploads directory
+	const uploadsDir = path.join(__dirname, '../../uploads');
+	if (!filePath.startsWith(uploadsDir)) {
+		return res.status(400).json({ error: 'Invalid path' });
+	}
 
 	fs.unlink(filePath, (err) => {
 		if (err) {
-			console.error('Failed to delete file:', err);
 			return res.status(500).json({ error: 'Failed to delete file' });
 		}
-		console.log('File deleted:', filePath);
 		res.json({ success: true });
 	});
 });
