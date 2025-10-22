@@ -6,6 +6,9 @@ const pool = new Pool({
 	host: process.env.PGHOST || 'localhost',
 	port: Number(process.env.PGPORT || 5432),
 	database: process.env.PGDATABASE || 'fable',
+	max: 50, // Maximum pool size for concurrent connections
+	idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
+	connectionTimeoutMillis: 5000, // Return error after 5 seconds if no connection available
 });
 
 async function checkConnection() {
@@ -123,6 +126,17 @@ async function ensureSchema() {
 
 		-- Add premium expiry to users table
 		alter table if exists users add column if not exists premium_expires_at timestamptz;
+
+		-- Favorite boards table
+		create table if not exists favorite_boards (
+			id uuid primary key default gen_random_uuid(),
+			user_id uuid not null references users(id) on delete cascade,
+			board_id uuid not null references boards(id) on delete cascade,
+			created_at timestamptz not null default now(),
+			unique(user_id, board_id)
+		);
+		create index if not exists idx_favorite_boards_user on favorite_boards(user_id);
+		create index if not exists idx_favorite_boards_board on favorite_boards(board_id);
 	`);
 }
 

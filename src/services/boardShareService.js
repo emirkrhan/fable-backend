@@ -32,10 +32,10 @@ async function shareBoardWithEmail({ boardId, ownerId, email, role = 'viewer' })
 }
 
 async function listBoardsForUser({ userId }) {
-  // Owned boards
+  // Owned boards with favorite status
   const { rows: owned } = await pool.query(
     `
-    SELECT 
+    SELECT
       b.id,
       b.name,
       b.owner_id,
@@ -45,18 +45,20 @@ async function listBoardsForUser({ userId }) {
       b.created_at,
       b.updated_at,
       true AS is_owner,
-      false AS is_shared
+      false AS is_shared,
+      CASE WHEN f.board_id IS NOT NULL THEN true ELSE false END AS is_favorite
     FROM boards b
     JOIN users u ON u.id = b.owner_id::uuid
-    WHERE b.owner_id = $1
+    LEFT JOIN favorite_boards f ON f.board_id = b.id AND f.user_id = $1::uuid
+    WHERE b.owner_id = $1::text
     `,
     [userId]
   );
 
-  // Shared boards
+  // Shared boards with favorite status
   const { rows: shared } = await pool.query(
     `
-    SELECT 
+    SELECT
       b.id,
       b.name,
       b.owner_id,
@@ -66,18 +68,26 @@ async function listBoardsForUser({ userId }) {
       b.created_at,
       b.updated_at,
       false AS is_owner,
-      true AS is_shared
+      true AS is_shared,
+      CASE WHEN f.board_id IS NOT NULL THEN true ELSE false END AS is_favorite
     FROM board_shares s
     JOIN boards b ON b.id = s.board_id
     JOIN users u ON u.id = b.owner_id::uuid
+    LEFT JOIN favorite_boards f ON f.board_id = b.id AND f.user_id = $1::uuid
     WHERE s.user_id = $1::uuid
     `,
     [userId]
   );
 
-  // Combine results
+  // Combine results - sort favorites first, then by updated_at
   return [...owned, ...shared]
-    .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
+    .sort((a, b) => {
+      // Favorites first
+      if (a.is_favorite && !b.is_favorite) return -1;
+      if (!a.is_favorite && b.is_favorite) return 1;
+      // Then by updated date
+      return new Date(b.updated_at) - new Date(a.updated_at);
+    })
     .map(b => ({
       id: b.id,
       name: b.name,
@@ -88,7 +98,8 @@ async function listBoardsForUser({ userId }) {
       createdAt: b.created_at,
       updatedAt: b.updated_at,
       access: b.is_owner ? 'owner' : 'viewer',
-      isShared: b.is_shared
+      isShared: b.is_shared,
+      isFavorite: b.is_favorite
     }));
 }
 

@@ -32,7 +32,14 @@ if (!fs.existsSync(UPLOADS_DIR)) {
 }
 app.use('/uploads', express.static(UPLOADS_DIR));
 app.use(cors({
-	origin: ALLOWED_ORIGINS,
+	origin: (origin, callback) => {
+		// Allow file:// protocol for local testing
+		if (!origin || origin === 'null' || ALLOWED_ORIGINS.includes(origin)) {
+			callback(null, true);
+		} else {
+			callback(new Error('Not allowed by CORS'));
+		}
+	},
 	credentials: true,
 	methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
 	allowedHeaders: ['Content-Type', 'Authorization']
@@ -41,14 +48,24 @@ app.use(express.json());
 const PORT = process.env.PORT || 4000;
 const io = new Server(server, {
 	cors: {
-		origin: ALLOWED_ORIGINS,
+		origin: (origin, callback) => {
+			// Allow file:// protocol for local testing
+			if (!origin || origin === 'null' || ALLOWED_ORIGINS.includes(origin)) {
+				callback(null, true);
+			} else {
+				callback(new Error('Not allowed by CORS'));
+			}
+		},
 		credentials: true
 	},
 	pingInterval: 25000, // Send ping every 25 seconds
 	pingTimeout: 20000,  // Wait 20 seconds for pong response
 	transports: ['polling', 'websocket'], // Start with polling, upgrade to websocket
 	upgradeTimeout: 10000, // Allow 10 seconds for upgrade
-	allowUpgrades: true
+	allowUpgrades: true,
+	maxHttpBufferSize: 1e8, // 100 MB
+	perMessageDeflate: false, // Disable compression for better performance
+	connectTimeout: 45000, // 45 seconds to complete connection
 });
 app.set('io', io);
 
@@ -290,20 +307,20 @@ io.on('connection', (socket) => {
 		}
 	});
 
-	// Cursor move with lightweight server-side throttling
+	// Cursor move with optimized server-side throttling
 	let lastCursorTs = 0;
 	socket.on('cursor:move', ({ x, y, color }) => {
 		const boardId = socket.currentBoardId;
 		if (!boardId) return;
 		const now = Date.now();
-		if (now - lastCursorTs < 50) return; // ~20fps throttle
+		if (now - lastCursorTs < 30) return; // ~33fps throttle for smoother cursor movement
 		lastCursorTs = now;
 		const roomId = `cursor:${boardId}`;
 		const cursorData = {
 			userId: socket.user.id,
 			userName: socket.user.name,
-			x: Math.round(Number(x) || 0),
-			y: Math.round(Number(y) || 0),
+			x: Number(x) || 0, // Don't round for smoother movement
+			y: Number(y) || 0,
 			color: color || '#3b82f6',
 			lastSeen: now,
 		};

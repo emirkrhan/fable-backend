@@ -43,4 +43,10 @@ router.delete('/:boardId/chats/:chatId', canEditBoard, chatCtrl.deleteChat);
 // AI usage stats endpoint
 router.get('/ai/usage-stats', chatCtrl.getUsageStats);
 
+// Favorites endpoints
+const favoriteCtrl = require('../controllers/favoriteController');
+router.get('/favorites', favoriteCtrl.listFavorites); // Must be before /:boardId routes
+router.post('/:boardId/favorite', canViewBoard, favoriteCtrl.addFavorite);
+router.delete('/:boardId/favorite', favoriteCtrl.removeFavorite);
+
 module.exports = router;
