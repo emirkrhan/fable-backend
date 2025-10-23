@@ -38,6 +38,7 @@ async function ensureSchema() {
 			owner_id text not null,
 			nodes jsonb not null default '[]'::jsonb,
 			edges jsonb not null default '[]'::jsonb,
+			spotlights jsonb not null default '[]'::jsonb,
 			created_at timestamptz not null default now(),
 			updated_at timestamptz not null default now()
 		);
@@ -56,6 +57,8 @@ async function ensureSchema() {
 		alter table if exists users add column if not exists avatar_url text;
 		-- Ensure role exists on existing databases
 		alter table if exists users add column if not exists role text not null default 'user';
+		-- Ensure spotlights column exists on existing boards
+		alter table if exists boards add column if not exists spotlights jsonb not null default '[]'::jsonb;
 		create index if not exists idx_boards_owner on boards(owner_id);
 
 		-- Chats per board

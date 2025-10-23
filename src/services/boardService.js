@@ -5,8 +5,15 @@ const { v4: uuidv4 } = require('uuid');
 async function addPermissionField(boardData, userId) {
 	if (!boardData) return null;
 
+	// Check if board has any shares
+	const { rows: shareRows } = await pool.query(
+		'SELECT COUNT(*) as count FROM board_shares WHERE board_id = $1',
+		[boardData.id]
+	);
+	const isShared = parseInt(shareRows[0]?.count || 0) > 0;
+
 	if (boardData.owner_id === userId) {
-		return { ...boardData, permission: 'owner' };
+		return { ...boardData, permission: 'owner', isShared };
 	}
 
 	const { rows } = await pool.query(
@@ -15,7 +22,7 @@ async function addPermissionField(boardData, userId) {
 	);
 
 	const permission = rows[0]?.role || 'viewer';
-	return { ...boardData, permission };
+	return { ...boardData, permission, isShared };
 }
 
 async function createBoard({ ownerId, name }) {
@@ -420,15 +427,15 @@ async function applyPatches({ id, ownerId, changes }) {
 	}
 }
 
-async function overwriteContent({ id, ownerId, nodes, edges }) {
+async function overwriteContent({ id, ownerId, nodes, edges, spotlights }) {
 	const client = await pool.connect();
 	try {
 		await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
 
 		const { rows } = await client.query(
-			`update boards set nodes = $2::jsonb, edges = $3::jsonb, updated_at = now()
+			`update boards set nodes = $2::jsonb, edges = $3::jsonb, spotlights = $4::jsonb, updated_at = now()
 			 where id = $1::uuid returning *`,
-			[id, JSON.stringify(nodes || []), JSON.stringify(edges || [])]
+			[id, JSON.stringify(nodes || []), JSON.stringify(edges || []), JSON.stringify(spotlights || [])]
 		);
 
 		await client.query('COMMIT');

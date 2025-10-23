@@ -108,8 +108,14 @@ async function putContent(req, res) {
 	try {
 		const ownerId = req.user.id;
 		const boardId = req.params.boardId;
-		const { nodes, edges } = req.body || {};
-        const result = await service.overwriteContent({ id: boardId, ownerId, nodes: nodes || [], edges: edges || [] });
+		const { nodes, edges, spotlights } = req.body || {};
+        const result = await service.overwriteContent({
+			id: boardId,
+			ownerId,
+			nodes: nodes || [],
+			edges: edges || [],
+			spotlights: spotlights || []
+		});
         if (!result) return res.status(404).json({ error: 'not found' });
 
         // NOTE: No broadcast for full content updates
@@ -182,11 +188,12 @@ async function patchBoard(req, res) {
 		
 		// Handle full content update
 		else if (hasContent) {
-			result = await service.overwriteContent({ 
-				id: boardId, 
-				ownerId, 
-				nodes: body.nodes || [], 
-				edges: body.edges || [] 
+			result = await service.overwriteContent({
+				id: boardId,
+				ownerId,
+				nodes: body.nodes || [],
+				edges: body.edges || [],
+				spotlights: body.spotlights || []
 			});
 		}
 
@@ -208,13 +215,14 @@ async function saveBoard(req, res) {
 	try {
 		const ownerId = req.user.id;
 		const boardId = req.params.boardId;
-		const { nodes, edges } = req.body || {};
+		const { nodes, edges, spotlights } = req.body || {};
 
-		const result = await service.overwriteContent({ 
-			id: boardId, 
-			ownerId, 
-			nodes: nodes || [], 
-			edges: edges || [] 
+		const result = await service.overwriteContent({
+			id: boardId,
+			ownerId,
+			nodes: nodes || [],
+			edges: edges || [],
+			spotlights: spotlights || []
 		});
 
 		if (!result) {
