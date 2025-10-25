@@ -17,7 +17,7 @@ async function shareBoardWithEmail({ boardId, ownerId, email, role = 'viewer' })
 	if (user.id === ownerId) return { status: 'invalid_self_share' };
 
 	// Validate role
-	if (!['viewer', 'editor'].includes(role)) {
+	if (!['viewer', 'editor', 'commenter'].includes(role)) {
 		role = 'viewer';
 	}
 
@@ -126,6 +126,24 @@ async function userCanEditBoard({ userId, boardId }) {
 	return !!rows[0];
 }
 
+async function getUserBoardRole({ userId, boardId }) {
+	// Check if user is the owner
+	const { rows: ownerRows } = await pool.query(
+		`select 1 from boards where id = $1::uuid and owner_id = $2`,
+		[boardId, userId]
+	);
+	if (ownerRows[0]) return 'owner';
+
+	// Check if user has a share
+	const { rows: shareRows } = await pool.query(
+		`select role from board_shares where board_id = $1::uuid and user_id = $2::uuid`,
+		[boardId, userId]
+	);
+	if (shareRows[0]) return shareRows[0].role;
+
+	return null; // No access
+}
+
 async function listBoardShares({ boardId, ownerId }) {
 	// Verify board ownership
 	const { rows: boardRows } = await pool.query('select id, owner_id from boards where id = $1', [boardId]);
@@ -165,7 +183,7 @@ async function updateShareRole({ boardId, ownerId, userId, role = 'viewer' }) {
 	if (boardRows[0].owner_id !== ownerId) throw new Error('Forbidden');
 
 	// Validate role
-	if (!['viewer', 'editor'].includes(role)) {
+	if (!['viewer', 'editor', 'commenter'].includes(role)) {
 		role = 'viewer';
 	}
 
@@ -182,6 +200,7 @@ module.exports = {
 	listBoardsForUser,
 	userCanViewBoard,
 	userCanEditBoard,
+	getUserBoardRole,
 	listBoardShares,
 	removeShare,
 	updateShareRole,

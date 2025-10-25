@@ -4,9 +4,10 @@ const path = require('path');
 const fs = require('fs');
 require('dotenv').config();
 // Read allowed CORS origins from environment (comma-separated)
-const rawCorsOrigins = process.env.CORS_ORIGINS || 'http://localhost:3000,http://localhost:3001,http://localhost:3002';
-//const rawCorsOrigins = 'http://localhost:3000,http://localhost:3001,http://localhost:3002';
+//const rawCorsOrigins = process.env.CORS_ORIGINS || 'http://localhost:3000,http://localhost:3001,http://localhost:3002';
+const rawCorsOrigins = 'http://localhost:3000,http://localhost:3001,http://localhost:3002';
 const ALLOWED_ORIGINS = rawCorsOrigins.split(',').map(o => o.trim()).filter(Boolean);
+console.log('🔒 CORS allowed origins:', ALLOWED_ORIGINS);
 const { pool, checkConnection, ensureSchema } = require('./db');
 const { ensureDemoUser } = require('./seed/demoUser');
 const boardsRouter = require('./routes/boards');

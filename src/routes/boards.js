@@ -2,7 +2,7 @@ const express = require('express');
 const ctrl = require('../controllers/boardController');
 const shareCtrl = require('../controllers/boardShareController');
 const { jwtAuth } = require('../middleware/jwt');
-const { canViewBoard, canEditBoard } = require('../middleware/boardAccess');
+const { canViewBoard, canEditBoard, attachBoardRole, canInteractWithBoard } = require('../middleware/boardAccess');
 
 const router = express.Router();
 
@@ -13,6 +13,8 @@ router.post('/', ctrl.create);
 // List owned + shared boards (single handler)
 router.get('/', shareCtrl.listForCurrentUser);
 router.get('/:boardId', canViewBoard, shareCtrl.attachPermission, ctrl.getById);
+// Get user's role for a board
+router.get('/:boardId/role', canViewBoard, shareCtrl.getBoardRole);
 router.patch('/:boardId', canEditBoard, ctrl.patchBoard); // PATCH for flexible updates
 router.put('/:boardId', canEditBoard, ctrl.rename);
 router.delete('/:boardId', canEditBoard, ctrl.remove);
@@ -20,8 +22,8 @@ router.delete('/:boardId', canEditBoard, ctrl.remove);
 // Incremental patch (alternative endpoint)
 router.post('/:boardId/patches', canEditBoard, ctrl.postPatches);
 
-// Simple save endpoint for auto-save
-router.post('/:boardId/save', canEditBoard, ctrl.saveBoard);
+// Simple save endpoint for auto-save (allow commenter to save comment cards)
+router.post('/:boardId/save', canInteractWithBoard, ctrl.saveBoard);
 
 // Full-state overwrite
 router.put('/:boardId/content', ctrl.putContent);

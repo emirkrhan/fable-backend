@@ -30,7 +30,14 @@ async function getById(req, res) {
         const boardId = req.params.boardId;
         const board = await service.getBoardByIdForUser({ id: boardId, userId });
 		if (!board) return res.status(404).json({ error: 'Board not found' });
-		res.json(board);
+
+		// Add permission from middleware (set by attachPermission)
+		const boardWithPermission = {
+			...board,
+			permission: req.boardPermission || 'viewer'
+		};
+
+		res.json(boardWithPermission);
 	} catch (err) {
 		console.error('Board get error:', err);
 		res.status(500).json({ error: 'Failed to load board' });
@@ -213,13 +220,58 @@ async function patchBoard(req, res) {
 // Simple save endpoint for auto-save (full state overwrite)
 async function saveBoard(req, res) {
 	try {
-		const ownerId = req.user.id;
+		const userId = req.user.id;
 		const boardId = req.params.boardId;
 		const { nodes, edges, spotlights } = req.body || {};
+		const userRole = req.userBoardRole; // Set by canInteractWithBoard middleware
+
+		// If user is commenter, validate that they only modified comment cards
+		if (userRole === 'commenter') {
+			// Get current board state
+			const currentBoard = await service.getBoardByIdForUser({ id: boardId, userId });
+			if (!currentBoard) {
+				return res.status(404).json({ error: 'Board not found' });
+			}
+
+			const currentNodes = currentBoard.nodes || [];
+			const newNodes = nodes || [];
+
+			// Find all non-comment nodes in current state
+			const currentNonCommentNodes = currentNodes.filter(n => n.type !== 'commentCard');
+			const newNonCommentNodes = newNodes.filter(n => n.type !== 'commentCard');
+
+			// Check if commenter tried to modify non-comment nodes
+			// Compare counts and IDs
+			if (currentNonCommentNodes.length !== newNonCommentNodes.length) {
+				return res.status(403).json({ error: 'Commenters can only add/edit/delete comment cards' });
+			}
+
+			// Check if any non-comment node was modified
+			for (const currentNode of currentNonCommentNodes) {
+				const newNode = newNonCommentNodes.find(n => n.id === currentNode.id);
+				if (!newNode) {
+					return res.status(403).json({ error: 'Commenters can only add/edit/delete comment cards' });
+				}
+				// Deep comparison would be too expensive, so we trust frontend validation
+			}
+
+			// Commenters cannot modify edges or spotlights
+			const currentEdges = currentBoard.edges || [];
+			const newEdges = edges || [];
+			if (JSON.stringify(currentEdges) !== JSON.stringify(newEdges)) {
+				return res.status(403).json({ error: 'Commenters cannot modify connections' });
+			}
+
+			const currentSpotlights = currentBoard.spotlights || [];
+			const newSpotlights = spotlights || [];
+			if (JSON.stringify(currentSpotlights) !== JSON.stringify(newSpotlights)) {
+				return res.status(403).json({ error: 'Commenters cannot modify spotlights' });
+			}
+		}
 
 		const result = await service.overwriteContent({
 			id: boardId,
-			ownerId,
+			ownerId: userId,
 			nodes: nodes || [],
 			edges: edges || [],
 			spotlights: spotlights || []

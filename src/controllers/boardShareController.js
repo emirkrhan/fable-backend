@@ -1,12 +1,12 @@
-const { shareBoardWithEmail, listBoardsForUser, userCanViewBoard, listBoardShares, removeShare, updateShareRole } = require('../services/boardShareService');
+const { shareBoardWithEmail, listBoardsForUser, userCanViewBoard, getUserBoardRole, listBoardShares, removeShare, updateShareRole } = require('../services/boardShareService');
 
-// Middleware: attach permission (owner/viewer) onto req for downstream handlers if needed
+// Middleware: attach permission (owner/editor/commenter/viewer) onto req for downstream handlers
 async function attachPermission(req, res, next) {
 	try {
 		const boardId = req.params.boardId;
 		const userId = req.user.id;
-		const canView = await userCanViewBoard({ userId, boardId });
-		req.boardPermission = canView ? 'viewer' : 'none';
+		const role = await getUserBoardRole({ userId, boardId });
+		req.boardPermission = role || 'none';
 		next();
 	} catch (err) {
 		next();
@@ -83,6 +83,18 @@ async function updateShare(req, res) {
 	}
 }
 
-module.exports = { shareWithEmail, listForCurrentUser, attachPermission, listShares, deleteShare, updateShare };
+async function getBoardRole(req, res) {
+	try {
+		const boardId = req.params.boardId;
+		const userId = req.user.id;
+		const role = await getUserBoardRole({ userId, boardId });
+		if (!role) return res.status(403).json({ error: 'No access to this board' });
+		res.json({ role });
+	} catch (err) {
+		res.status(500).json({ error: err.message });
+	}
+}
+
+module.exports = { shareWithEmail, listForCurrentUser, attachPermission, listShares, deleteShare, updateShare, getBoardRole };
 
 
